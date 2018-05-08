@@ -1,133 +1,84 @@
 
 
-var inquirer = require('inquirer');
-var mysql = require('mysql');
 
-var connection = mysql.createConnection({
+let mysql = require('mysql');
+let inquirer = require('inquirer');
+let Table = require('easy-table');
+
+
+const connection = mysql.createConnection({
     host: 'localhost',
     port: 3306,
-
-    // Your username
     user: 'root',
-
-    // Your password
-    password: '',
-    database: 'Bamazon'
+    password: 'monadarling',
+    database: 'bamazon'
 });
 
 
-function validateInput(value) {
-    var integer = Number.isInteger(parseFloat(value));
-    var sign = Math.sign(value);
+connection.connect(function(err) {
+    if (err) throw err;
+    console.log('Connected as id' + connection.threadId);
+    startBuying();
+});
 
-    if (integer && (sign === 1)) {
-        return true;
-    } else {
-        return 'Please enter a whole number.';
-    }
-}
+function print (res) {
+
+    var t = new Table;
+
+    res.forEach(function(product) {
+        t.cell('Item Id', product.item_id);
+        t.cell('Product Name', product.product_name);
+        t.cell('Department', product.department_name);
+        t.cell('Price, USD', product.price, Table.number(2));
+        t.cell('Stock Quantity', product.stock_quantity);
+        t.newRow()
+    })
+    console.log(t.toString());
 
 
-function promptUserPurchase() {
 
-    inquirer.prompt(
-        {
-            type: 'input',
-            name: 'item_id',
-            message: 'Please enter the Item ID which you would like to buy.',
-            validate: validateInput,
-            filter: Number
-        },
-        {
-            type: 'input',
-            name: 'quantity',
-            message: 'How many do you need?',
-            validate: validateInput,
-            filter: Number
+
+    var startBuying = function() {
+    connection.query('SELECT * FROM products', function(err, res) {
+        printStuff(res);
+        var choiceArray = [];
+        for (var i = 0; i < res.length; i++) {
+            choiceArray.push(res[i].product_name);
         }
-    ).then(function(input) {
 
+        inquirer.prompt([{
+            name: "item",
+            type: "input",
+            message: 'Which item would you like to purchase?'
+        },
+            { name:'quantity',
+                type: 'input',
+                message: "How many would you like to purchase?"
 
-        var item = input.item_id;
-        var quantity = input.quantity;
-
-
-        var queryStr = 'SELECT * FROM products WHERE ?';
-
-        connection.query(queryStr, {item_id: item}, function(err, data) {
-            if (err) throw err;
-
-
-
-            if (data.length === 0) {
-                console.log('ERROR: Invalid Item ID. Please select a valid Item ID.');
-                displayInventory();
-
-            } else {
-                var productData = data[0];
-
-
-                if (quantity <= productData.stock_quantity) {
-                    console.log('Congratulations, the product you requested is in stock!');
-
-
-                    var updateQueryStr = 'UPDATE products SET stock_quantity = ' + (productData.stock_quantity - quantity) + ' WHERE item_id = ' + item;
-
-
-
-                    connection.query(updateQueryStr, function(err, data) {
-                        if (err) throw err;
-
-                        console.log('Your oder has been placed! Your total is $' + productData.price * quantity);
-
-
-
-                        connection.end();
-                    })
-                } else {
-                    console.log('Sorry, out of stock.');
-
-
-                    displayInventory();
+            }]).then(function(answer) {
+            console.log(res);
+            console.log(answer);
+            var itemID = answer.item;
+            console.log(itemID);
+            var chosenItem = res[itemID-1];
+            console.log(chosenItem);
+            var newQuantity = chosenItem.stock_quantity - answer.quantity;
+            if(newQuantity >= 0){
+                connection.query("UPDATE products SET ? WHERE item_id = ?",[{stock_quantity: newQuantity}, itemID],function(err,response) { if (err){
+                    throw err
                 }
+                    console.log(response);
+                });
+                startBuying();
+            } else {
+                console.log('there are not enough in stock for you to purchase that many items.');
             }
         })
     })
-}
 
 
-function displayInventory() {
-
-
-
-    queryStr = 'SELECT * FROM products';
-
-
-    connection.query(queryStr, function(err, data) {
-        if (err) throw err;
+};
 
 
 
-        var strOut = '';
-        for (var i = 0; i < data.length; i++) {
-            strOut = '';
-            strOut += 'Item ID: ' + data[i].item_id + '  //  ';
-            strOut += 'Product Name: ' + data[i].product_name + '  //  ';
-            strOut += 'Department: ' + data[i].department_name + '  //  ';
-            strOut += 'Price: $' + data[i].price + '\n';
 
-            console.log(strOut);
-        }
-
-        promptUserPurchase();
-    })
-}
-
-
-function runBamazon() {
-
-    displayInventory();
-}
-
-
-runBamazon();
